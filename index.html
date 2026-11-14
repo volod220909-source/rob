@@ -12,8 +12,9 @@
   h1{font-size:22px;margin:0 0 4px} .sub{opacity:.8;font-size:13px}
   .panel{background:white;border-radius:16px;padding:14px;box-shadow:0 2px 12px #17255412}
   label{display:block;font-size:13px;font-weight:650;margin:10px 0 5px}
-  input,button{font:inherit;border-radius:11px;padding:12px;border:1px solid #cbd5e1}
-  input{width:100%;background:white;color:#172033}
+  input,button,textarea{font:inherit;border-radius:11px;padding:12px;border:1px solid #cbd5e1}
+  input,textarea{width:100%;background:white;color:#172033}
+  textarea{min-height:90px;resize:vertical}
   button{border:0;background:#1d4ed8;color:white;font-weight:650;cursor:pointer}
   button:disabled{opacity:.5;cursor:not-allowed}
   .row{display:flex;gap:8px}.row input{min-width:0;flex:1}
@@ -25,6 +26,14 @@
   #chatPanel{display:none;flex:1;flex-direction:column;gap:10px}
   .hint{font-size:12px;color:#64748b;line-height:1.45}
   .error{color:#b91c1c!important}
+
+  .menu-title{font-size:19px;margin:0 0 4px}
+  .menu-box{display:flex;flex-direction:column;gap:9px}
+  .menu-box + .menu-box{margin-top:18px;padding-top:16px;border-top:1px solid #e2e8f0}
+  .result{background:#e2e8f0;padding:12px;border-radius:10px;min-height:55px;overflow-wrap:anywhere;white-space:pre-wrap}
+  .result.error{background:#fee2e2}
+  .btn-gray{background:#475569}
+  .btn-green{background:#15803d}
 </style>
 </head>
 <body>
@@ -50,152 +59,4 @@
       <input id="message" maxlength="1000" placeholder="Напиши повідомлення..." autocomplete="off">
       <button id="send">Надіслати</button>
     </div>
-    <div class="hint">🔒 Повідомлення шифруються перед відправкою й розшифровуються автоматично. Не надсилай паролі чи приватні дані.</div>
-  </section>
-
-  <section class="panel hint">
-    <strong>Перший запуск — потрібне одноразове налаштування.</strong><br>
-    Цей HTML-файл є інтерфейсом чату, але не містить власного сервера. Щоб Android та iPhone могли обмінюватися повідомленнями через інтернет, використовується проєкт Firebase: увімкни Authentication → Anonymous та створи Cloud Firestore. У Firestore Rules встанови правило:
-    <pre style="white-space:pre-wrap;background:#f1f5f9;padding:9px;border-radius:8px">rules_version = '2';
-service cloud.firestore {
-  match /databases/{database}/documents {
-    match /rooms/{roomId}/messages/{messageId} {
-      allow read, create: if request.auth != null;
-    }
-  }
-}</pre>
-    Це базове демо-правило: будь-який авторизований анонімний користувач, який знає ID кімнати, може читати й надсилати повідомлення. Шифр у цьому файлі навчальний і легко зламується, він не замінює справжнього захисту даних.
-  </section>
-</div>
-
-<!-- Шифрування: звичайний скрипт, не залежить від Firebase -->
-<script>
-window.chatCrypto = (function () {
-  var PREFIX = "e1:";
-  var KEY = new TextEncoder().encode("мій-чат-2026");
-
-  function xor(bytes) {
-    var out = new Uint8Array(bytes.length);
-    for (var i = 0; i < bytes.length; i++) {
-      out[i] = bytes[i] ^ KEY[i % KEY.length] ^ ((i * 7 + 13) & 255);
-    }
-    return out;
-  }
-  function toB64(bytes) {
-    var s = "";
-    for (var i = 0; i < bytes.length; i++) s += String.fromCharCode(bytes[i]);
-    return btoa(s).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
-  }
-  function fromB64(str) {
-    str = str.replace(/-/g, "+").replace(/_/g, "/");
-    while (str.length % 4) str += "=";
-    var bin = atob(str), bytes = new Uint8Array(bin.length);
-    for (var i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
-    return bytes;
-  }
-  return {
-    encrypt: function (text) {
-      return PREFIX + toB64(xor(new TextEncoder().encode(text)));
-    },
-    decrypt: function (text) {
-      if (typeof text !== "string" || text.indexOf(PREFIX) !== 0) return text; // старі нешифровані повідомлення
-      try {
-        return new TextDecoder("utf-8", { fatal: true }).decode(xor(fromB64(text.slice(PREFIX.length))));
-      } catch (e) {
-        return "🔒 [не вдалося розшифрувати]";
-      }
-    }
-  };
-})();
-</script>
-
-<script type="module">
-import { initializeApp } from "https://www.gstatic.com/firebasejs/13.3.0/firebase-app.js";
-import { getAuth, signInAnonymously } from "https://www.gstatic.com/firebasejs/13.3.0/firebase-auth.js";
-import { getFirestore, collection, addDoc, query, orderBy, limit, onSnapshot, serverTimestamp } from "https://www.gstatic.com/firebasejs/13.3.0/firebase-firestore.js";
-
-const FIREBASE_CONFIG = {
-  apiKey: "AIzaSyBQAULxKX4CcsVAKIAdApev13wGuFW6cWk",
-  authDomain: "roboc-f5e7a.firebaseapp.com",
-  projectId: "roboc-f5e7a",
-  storageBucket: "roboc-f5e7a.firebasestorage.app",
-  messagingSenderId: "756290936449",
-  appId: "1:756290936449:web:28d1b43a1d2d49b95df780",
-  measurementId: "G-3L0510P95T"
-};
-
-const $ = id => document.getElementById(id);
-const status = $("status");
-let db, auth, unsubscribe = null, currentName = "", currentRoom = "";
-
-function setStatus(text, isError=false) {
-  status.textContent = text;
-  status.className = isError ? "error" : "";
-}
-$("newRoom").onclick = () => $("room").value = String(Math.floor(1000 + Math.random()*9000));
-$("join").onclick = async () => {
-  currentName = $("name").value.trim();
-  currentRoom = $("room").value.trim().replace(/[^a-zA-Z0-9_-]/g,"").slice(0,32);
-  if (!currentName || !currentRoom) return setStatus("Введи ім'я та код кімнати.", true);
-  $("join").disabled = true;
-  setStatus("Підключення...");
-  try {
-    const app = initializeApp(FIREBASE_CONFIG);
-    auth = getAuth(app);
-    db = getFirestore(app);
-    await signInAnonymously(auth);
-    $("setup").style.display = "none";
-    $("chatPanel").style.display = "flex";
-    $("roomTitle").textContent = "Кімната: " + currentRoom;
-    const messagesRef = collection(db, "rooms", currentRoom, "messages");
-    const q = query(messagesRef, orderBy("createdAt"), limit(100));
-    unsubscribe = onSnapshot(q, snapshot => {
-      const box = $("messages");
-      box.replaceChildren();
-      snapshot.forEach(doc => {
-        const data = doc.data();
-        const item = document.createElement("div");
-        item.className = "msg" + (data.uid === auth.currentUser.uid ? " mine" : "");
-        const meta = document.createElement("div");
-        meta.className = "meta";
-        meta.textContent = data.name || "Учасник";
-        const body = document.createElement("div");
-        body.textContent = window.chatCrypto.decrypt(data.text || "");
-        item.append(meta, body);
-        box.append(item);
-      });
-      box.scrollTop = box.scrollHeight;
-    }, err => setStatus("Помилка отримання повідомлень: " + err.message, true));
-  } catch (e) {
-    setStatus("Не вдалося підключитися: " + e.message, true);
-    $("join").disabled = false;
-  }
-};
-async function sendMessage() {
-  const text = $("message").value.trim();
-  if (!text || !db || !currentRoom) return;
-  $("send").disabled = true;
-  try {
-    await addDoc(collection(db, "rooms", currentRoom, "messages"), {
-      name: currentName,
-      text: window.chatCrypto.encrypt(text),
-      uid: auth.currentUser.uid,
-      createdAt: serverTimestamp()
-    });
-    $("message").value = "";
-  } catch(e) { alert("Не вдалося надіслати: " + e.message); }
-  $("send").disabled = false;
-}
-$("send").onclick = sendMessage;
-$("message").addEventListener("keydown", e => { if (e.key === "Enter") sendMessage(); });
-$("leave").onclick = () => {
-  if (unsubscribe) unsubscribe();
-  unsubscribe = null;
-  $("chatPanel").style.display = "none";
-  $("setup").style.display = "block";
-  $("join").disabled = false;
-  setStatus("Ти вийшов із кімнати.");
-};
-</script>
-</body>
-</html>
+    <div class="hint">🔒 Повідомлення шифруються перед
