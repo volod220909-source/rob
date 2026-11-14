@@ -1,0 +1,153 @@
+<!doctype html>
+<html lang="uk">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#172554">
+<title>Мій чат</title>
+<style>
+  *{box-sizing:border-box} body{margin:0;font-family:system-ui,-apple-system,Arial,sans-serif;background:#eef2ff;color:#172033}
+  .wrap{max-width:680px;margin:0 auto;min-height:100dvh;padding:16px;display:flex;flex-direction:column;gap:12px}
+  header{background:#172554;color:white;padding:18px;border-radius:18px}
+  h1{font-size:22px;margin:0 0 4px} .sub{opacity:.8;font-size:13px}
+  .panel{background:white;border-radius:16px;padding:14px;box-shadow:0 2px 12px #17255412}
+  label{display:block;font-size:13px;font-weight:650;margin:10px 0 5px}
+  input,button{font:inherit;border-radius:11px;padding:12px;border:1px solid #cbd5e1}
+  input{width:100%;background:white;color:#172033}
+  button{border:0;background:#1d4ed8;color:white;font-weight:650;cursor:pointer}
+  button:disabled{opacity:.5;cursor:not-allowed}
+  .row{display:flex;gap:8px}.row input{min-width:0;flex:1}
+  #status{font-size:13px;color:#475569;margin-top:8px}
+  #messages{flex:1;min-height:220px;max-height:55dvh;overflow:auto;display:flex;flex-direction:column;gap:9px;padding:4px}
+  .msg{max-width:85%;background:#e2e8f0;border-radius:14px;padding:9px 12px;overflow-wrap:anywhere}
+  .msg.mine{align-self:flex-end;background:#dbeafe}
+  .meta{font-size:11px;color:#64748b;margin-bottom:3px}
+  #chatPanel{display:none;flex:1;flex-direction:column;gap:10px}
+  .hint{font-size:12px;color:#64748b;line-height:1.45}
+  .error{color:#b91c1c!important}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header><h1>Мій чат</h1><div class="sub">Приватна кімната за кодом</div></header>
+  <section class="panel" id="setup">
+    <label for="name">Твоє ім'я</label><input id="name" maxlength="24" placeholder="Наприклад, Андрій">
+    <label for="room">Код кімнати</label><input id="room" maxlength="32" placeholder="Наприклад, 4821" autocomplete="off">
+    <div class="row" style="margin-top:12px">
+      <button id="join" style="flex:1">Увійти в чат</button>
+      <button id="newRoom" style="background:#475569">Новий код</button>
+    </div>
+    <div id="status">Для роботи потрібен інтернет і налаштований Firebase. Інструкція є внизу файлу.</div>
+  </section>
+  <section class="panel" id="chatPanel">
+    <div class="row" style="align-items:center;justify-content:space-between">
+      <strong id="roomTitle">Кімната</strong><button id="leave" style="background:#64748b;padding:8px 12px">Вийти</button>
+    </div>
+    <div id="messages"></div>
+    <div class="row">
+      <input id="message" maxlength="1000" placeholder="Напиши повідомлення..." autocomplete="off">
+      <button id="send">Надіслати</button>
+    </div>
+    <div class="hint">Повідомлення бачать учасники, які знають код кімнати. Не надсилай паролі чи приватні дані.</div>
+  </section>
+  <section class="panel hint">
+    <strong>Перший запуск — потрібне одноразове налаштування.</strong><br>
+    Цей HTML-файл є інтерфейсом чату, але не містить власного сервера. Щоб Android та iPhone могли обмінюватися повідомленнями через інтернет, створи безкоштовний проєкт Firebase: увімкни Authentication → Anonymous та створи Cloud Firestore. Потім встав вебконфігурацію Firebase у блок FIREBASE_CONFIG нижче. У Firestore Rules встанови правило:
+    <pre style="white-space:pre-wrap;background:#f1f5f9;padding:9px;border-radius:8px">rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /rooms/{roomId}/messages/{messageId} {
+      allow read, create: if request.auth != null;
+    }
+  }
+}</pre>
+    Це базове демо-правило: будь-який авторизований анонімний користувач, який знає ID кімнати, може читати й надсилати повідомлення. Для публічного використання потрібні сильніші правила, обмеження доступу та захист від спаму.
+  </section>
+</div>
+
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+import { getAuth, signInAnonymously } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+import { getFirestore, collection, addDoc, query, orderBy, limit, onSnapshot, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+
+// ВСТАВ СЮДИ конфігурацію свого Firebase Web App:
+const FIREBASE_CONFIG = {
+  apiKey: "ВСТАВ_API_KEY",
+  authDomain: "ВСТАВ_PROJECT_ID.firebaseapp.com",
+  projectId: "ВСТАВ_PROJECT_ID",
+  appId: "ВСТАВ_APP_ID"
+};
+
+const $ = id => document.getElementById(id);
+const status = $("status");
+let db, auth, unsubscribe = null, currentName = "", currentRoom = "";
+
+function setStatus(text, isError=false) {
+  status.textContent = text;
+  status.className = isError ? "error" : "";
+}
+$("newRoom").onclick = () => $("room").value = String(Math.floor(1000 + Math.random()*9000));
+$("join").onclick = async () => {
+  currentName = $("name").value.trim();
+  currentRoom = $("room").value.trim().replace(/[^a-zA-Z0-9_-]/g,"").slice(0,32);
+  if (!currentName || !currentRoom) return setStatus("Введи ім'я та код кімнати.", true);
+  if (FIREBASE_CONFIG.apiKey.startsWith("ВСТАВ_")) return setStatus("Спочатку налаштуй Firebase і встав конфігурацію в код файлу.", true);
+  $("join").disabled = true;
+  setStatus("Підключення...");
+  try {
+    const app = initializeApp(FIREBASE_CONFIG);
+    auth = getAuth(app);
+    db = getFirestore(app);
+    await signInAnonymously(auth);
+    $("setup").style.display = "none";
+    $("chatPanel").style.display = "flex";
+    $("roomTitle").textContent = "Кімната: " + currentRoom;
+    const messagesRef = collection(db, "rooms", currentRoom, "messages");
+    const q = query(messagesRef, orderBy("createdAt"), limit(100));
+    unsubscribe = onSnapshot(q, snapshot => {
+      const box = $("messages");
+      box.replaceChildren();
+      snapshot.forEach(doc => {
+        const data = doc.data();
+        const item = document.createElement("div");
+        item.className = "msg" + (data.uid === auth.currentUser.uid ? " mine" : "");
+        const meta = document.createElement("div");
+        meta.className = "meta";
+        meta.textContent = data.name || "Учасник";
+        const body = document.createElement("div");
+        body.textContent = data.text || "";
+        item.append(meta, body);
+        box.append(item);
+      });
+      box.scrollTop = box.scrollHeight;
+    }, err => setStatus("Помилка отримання повідомлень: " + err.message, true));
+  } catch (e) {
+    setStatus("Не вдалося підключитися: " + e.message, true);
+    $("join").disabled = false;
+  }
+};
+async function sendMessage() {
+  const text = $("message").value.trim();
+  if (!text || !db || !currentRoom) return;
+  $("send").disabled = true;
+  try {
+    await addDoc(collection(db, "rooms", currentRoom, "messages"), {
+      name: currentName, text, uid: auth.currentUser.uid, createdAt: serverTimestamp()
+    });
+    $("message").value = "";
+  } catch(e) { alert("Не вдалося надіслати: " + e.message); }
+  $("send").disabled = false;
+}
+$("send").onclick = sendMessage;
+$("message").addEventListener("keydown", e => { if (e.key === "Enter") sendMessage(); });
+$("leave").onclick = () => {
+  if (unsubscribe) unsubscribe();
+  unsubscribe = null;
+  $("chatPanel").style.display = "none";
+  $("setup").style.display = "block";
+  $("join").disabled = false;
+  setStatus("Ти вийшов із кімнати.");
+};
+</script>
+</body>
+</html>
