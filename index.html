@@ -12,7 +12,7 @@
   h1{font-size:22px;margin:0 0 4px} .sub{opacity:.8;font-size:13px}
   .panel{background:white;border-radius:16px;padding:14px;box-shadow:0 2px 12px #17255412}
   label{display:block;font-size:13px;font-weight:650;margin:10px 0 5px}
-  input,button{font:inherit;border-radius:11px;padding:12px;border:1px solid #cbd5e1}
+  input,button,select,textarea{font:inherit;border-radius:11px;padding:12px;border:1px solid #cbd5e1}
   input{width:100%;background:white;color:#172033}
   button{border:0;background:#1d4ed8;color:white;font-weight:650;cursor:pointer}
   button:disabled{opacity:.5;cursor:not-allowed}
@@ -25,11 +25,23 @@
   #chatPanel{display:none;flex:1;flex-direction:column;gap:10px}
   .hint{font-size:12px;color:#64748b;line-height:1.45}
   .error{color:#b91c1c!important}
+
+  .crypto-title{font-size:19px;margin:0 0 12px}
+  .crypto-result{background:#e2e8f0;padding:12px;border-radius:10px;min-height:55px;overflow-wrap:anywhere;margin-top:4px;white-space:pre-wrap}
+  .crypto-result.error{background:#fee2e2}
+  .crypto-panel{display:flex;flex-direction:column;gap:9px}
+  .crypto-panel select,.crypto-panel textarea{width:100%;padding:12px;border:1px solid #cbd5e1;border-radius:11px;font:inherit;background:white;color:#172033}
+  .crypto-panel textarea{min-height:85px;resize:vertical}
+  .crypto-panel button{width:100%}
+  .crypto-panel hr{width:100%;border:0;border-top:1px solid #e2e8f0;margin:10px 0}
+  .btn-gray{background:#475569}
+  .btn-green{background:#15803d}
 </style>
 </head>
 <body>
 <div class="wrap">
   <header><h1>Мій чат</h1><div class="sub">Приватна кімната за кодом</div></header>
+
   <section class="panel" id="setup">
     <label for="name">Твоє ім'я</label><input id="name" maxlength="24" placeholder="Наприклад, Андрій">
     <label for="room">Код кімнати</label><input id="room" maxlength="32" placeholder="Наприклад, 4821" autocomplete="off">
@@ -37,8 +49,9 @@
       <button id="join" style="flex:1">Увійти в чат</button>
       <button id="newRoom" style="background:#475569">Новий код</button>
     </div>
-    <div id="status">Для роботи потрібен інтернет і налаштований Firebase. Інструкція є внизу файлу.</div>
+    <div id="status">Для роботи потрібен інтернет і налаштований Firebase.</div>
   </section>
+
   <section class="panel" id="chatPanel">
     <div class="row" style="align-items:center;justify-content:space-between">
       <strong id="roomTitle">Кімната</strong><button id="leave" style="background:#64748b;padding:8px 12px">Вийти</button>
@@ -50,9 +63,25 @@
     </div>
     <div class="hint">Повідомлення бачать учасники, які знають код кімнати. Не надсилай паролі чи приватні дані.</div>
   </section>
+
+  <section class="panel crypto-panel">
+    <h2 class="crypto-title">Шифрування</h2>
+    <textarea id="cryptoInput" placeholder="Встав або введи текст тут..."></textarea>
+    <div class="row">
+      <button id="encryptBtn" style="flex:1">Зашифрувати</button>
+      <button id="decryptBtn" class="btn-gray" style="flex:1">Розшифрувати</button>
+    </div>
+    <div><strong>Результат:</strong></div>
+    <div class="crypto-result" id="cryptoResult"></div>
+    <div class="row">
+      <button id="copyResult" class="btn-gray" style="flex:1">Копіювати</button>
+      <button id="toChat" class="btn-green" style="flex:1">В поле чату</button>
+    </div>
+  </section>
+
   <section class="panel hint">
     <strong>Перший запуск — потрібне одноразове налаштування.</strong><br>
-    Цей HTML-файл є інтерфейсом чату, але не містить власного сервера. Щоб Android та iPhone могли обмінюватися повідомленнями через інтернет, створи безкоштовний проєкт Firebase: увімкни Authentication → Anonymous та створи Cloud Firestore. Потім встав вебконфігурацію Firebase у блок FIREBASE_CONFIG нижче. У Firestore Rules встанови правило:
+    Цей HTML-файл є інтерфейсом чату, але не містить власного сервера. Щоб Android та iPhone могли обмінюватися повідомленнями через інтернет, використовується проєкт Firebase: увімкни Authentication → Anonymous та створи Cloud Firestore. У Firestore Rules встанови правило:
     <pre style="white-space:pre-wrap;background:#f1f5f9;padding:9px;border-radius:8px">rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
@@ -61,7 +90,8 @@ service cloud.firestore {
     }
   }
 }</pre>
-    Це базове демо-правило: будь-який авторизований анонімний користувач, який знає ID кімнати, може читати й надсилати повідомлення. Для публічного використання потрібні сильніші правила, обмеження доступу та захист від спаму.
+    Це базове демо-правило: будь-який авторизований анонімний користувач, який знає ID кімнати, може читати й надсилати повідомлення. Для публічного використання потрібні сильніші правила, обмеження доступу та захист від спаму.<br><br>
+    Шифр у цьому файлі навчальний і легко зламується. Він не замінює справжнього захисту даних.
   </section>
 </div>
 
@@ -69,7 +99,7 @@ service cloud.firestore {
 import { initializeApp } from "https://www.gstatic.com/firebasejs/13.3.0/firebase-app.js";
 import { getAuth, signInAnonymously } from "https://www.gstatic.com/firebasejs/13.3.0/firebase-auth.js";
 import { getFirestore, collection, addDoc, query, orderBy, limit, onSnapshot, serverTimestamp } from "https://www.gstatic.com/firebasejs/13.3.0/firebase-firestore.js";
-// ВСТАВ СЮДИ конфігурацію свого Firebase Web App:
+
 const FIREBASE_CONFIG = {
   apiKey: "AIzaSyBQAULxKX4CcsVAKIAdApev13wGuFW6cWk",
   authDomain: "roboc-f5e7a.firebaseapp.com",
@@ -151,5 +181,24 @@ $("leave").onclick = () => {
   setStatus("Ти вийшов із кімнати.");
 };
 </script>
-</body>
-</html>
+
+<script>
+(function () {
+  var KEY = new TextEncoder().encode("мій-чат-2026");
+  var $ = function (id) { return document.getElementById(id); };
+
+  function xor(bytes) {
+    var out = new Uint8Array(bytes.length);
+    for (var i = 0; i < bytes.length; i++) {
+      out[i] = bytes[i] ^ KEY[i % KEY.length] ^ ((i * 7 + 13) & 255);
+    }
+    return out;
+  }
+  function toB64(bytes) {
+    var s = "";
+    for (var i = 0; i < bytes.length; i++) s += String.fromCharCode(bytes[i]);
+    return btoa(s).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+  }
+  function fromB64(str) {
+    str = str.trim().replace(/-/g, "+").replace(/_/g, "/");
+    while
