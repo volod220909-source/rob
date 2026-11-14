@@ -66,16 +66,18 @@ service cloud.firestore {
 </div>
 
 <script type="module">
-import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
-import { getAuth, signInAnonymously } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
-import { getFirestore, collection, addDoc, query, orderBy, limit, onSnapshot, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
-
+import { initializeApp } from "https://www.gstatic.com/firebasejs/13.3.0/firebase-app.js";
+import { getAuth, signInAnonymously } from "https://www.gstatic.com/firebasejs/13.3.0/firebase-auth.js";
+import { getFirestore, collection, addDoc, query, orderBy, limit, onSnapshot, serverTimestamp } from "https://www.gstatic.com/firebasejs/13.3.0/firebase-firestore.js";
 // ВСТАВ СЮДИ конфігурацію свого Firebase Web App:
 const FIREBASE_CONFIG = {
-  apiKey: "ВСТАВ_API_KEY",
-  authDomain: "ВСТАВ_PROJECT_ID.firebaseapp.com",
-  projectId: "ВСТАВ_PROJECT_ID",
-  appId: "ВСТАВ_APP_ID"
+  apiKey: "AIzaSyBQAULxKX4CcsVAKIAdApev13wGuFW6cWk",
+  authDomain: "roboc-f5e7a.firebaseapp.com",
+  projectId: "roboc-f5e7a",
+  storageBucket: "roboc-f5e7a.firebasestorage.app",
+  messagingSenderId: "756290936449",
+  appId: "1:756290936449:web:28d1b43a1d2d49b95df780",
+  measurementId: "G-3L0510P95T"
 };
 
 const $ = id => document.getElementById(id);
